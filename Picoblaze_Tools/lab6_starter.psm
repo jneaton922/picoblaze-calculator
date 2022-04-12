@@ -25,38 +25,40 @@ cold_start:
 ; s7 	-   Slider operator/operand
 ; s8	-	debug LEDs
 
-	reset: 	LOAD s3, 00								;reset running result to 0
-			LOAD s4, 00								
-			OUTPUT s3, 04							;display reset values
-			OUTPUT s4, 05
-			LOAD s5, 00								;zero out stored pushbutton values
-			LOAD s6, 00
+	reset: 	LOAD s3,  00								;reset running result to 0
+			LOAD s4,  00	
+			LOAD s8,  00							
+			OUTPUT s3,  04							;display reset values
+			OUTPUT s4,  05
+			OUTPUT s8,  06
+			LOAD s5,  00								;zero out stored pushbutton values
+			LOAD s6,  00
 
 			;; wait for btnd to be depressed to exit reset state
-			INPUT s5, 03
-			TEST s5, 08
+			INPUT s5,  03
+			TEST s5,  08
 			JUMP NZ, reset	;stay in reset until 'depressed'
 		
 	; Main Processing Loop
 	; Runs debouncer on input push btns
 	; Checks current state of push btns to perform operation or reset
-	mainlp:	INPUT s5, 03	; store push buttons
+	mainlp:	INPUT s5,  03	; store push buttons
 			CALL del10ms	; delay 10ms
-			INPUT s6, 03	; store push buttons again
+			INPUT s6,  03	; store push buttons again
 			AND s5, s6		; AND push buttons to only keep signals high if held for 10ms
 			
 			; Determine if Btn0 was pressed
-			TEST s5, 01
+			TEST s5,  01
 			JUMP NZ, calc	; Start Calculator
 			
 			; Determine if Btn3 was pressed
-			TEST s5, 08
+			TEST s5,  08
 			JUMP NZ, reset	; Reset
 
 			; Update Displays
-			OUTPUT s3, 04	; Update Display with ALU REG
-			OUTPUT s4, 05
-			OUTPUT s8, 06	; Update LEDs with last op performed
+			OUTPUT s3,  04	; Update Display with ALU REG
+			OUTPUT s4,  05
+			OUTPUT s8,  06	; Update LEDs with last op performed
 
 			JUMP mainlp
 	
@@ -67,24 +69,27 @@ cold_start:
 	; Evaluate slider state (7-4) to determine operation
 	; Evaluate slider state (3-0) to determine operand
 	; jump to operator subroutine 
-	calc: INPUT s7, 02 ; grab slider state
+	calc: INPUT s7,  02 ; grab slider state
 		  ; MSB 4-bits are operator
 
 		  ; add if sw4
-		  TEST s7, 10
+		  TEST s7,  10
 		  JUMP NZ, addop
 
 		  ; sub if sw5
-		  TEST s7, 20
+		  TEST s7,  20
 		  JUMP NZ, subop
 	      
 		  ; shift left if sw6
-		  TEST s7, 40
+		  TEST s7,  40
 		  JUMP NZ, slop
 
 		  ; multiply if sw7
-		  TEST s7, 80
+		  TEST s7,  80
 		  JUMP NZ, multop
+
+		  LOAD s8,  00 ; no LEDs because nothing happened
+		  RETURN
 
 	; return here for 1 operation per press	  
 	calcend: RETURN
@@ -92,14 +97,18 @@ cold_start:
 
 	;	ADD OPERATION
 	;	Handles Carry
-	addop:	ADD s3, 01 ; ADD 1 to register
-			LOAD s8, 01
+	addop:	AND s7,  0F ; mask operator bits
+			ADD s3, s7 ; ADD sw value to register
+			ADDCY s4, 00 ; ADD carry to MSB register
+			LOAD s8, 01 ; LED to highlight add operation
 			JUMP wait
 
 	
 	;	SUBTRACT OPERATION
 	;	Basic Subtract
-	subop:	SUB s3, 01		; subtract 1 from S3
+	subop:	AND s7,  0F ; mask operator bits
+			SUB s3, s7	 ; subtract sw value from S3
+			SUBCY s4, 00 ; subtract carry
 			LOAD s8, 02
 			JUMP wait
 	
