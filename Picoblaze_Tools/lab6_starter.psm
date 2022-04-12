@@ -19,23 +19,27 @@ cold_start:
 
 ; NOTE: (s# usage):
 ; s0,s1,s2 - Used in delay subroutines
-; s3	-	Stores global register for value to display
+; s3,s4	-	Stores global register for value to display
 ; s5	-	Stores the debounced push btn signal
 ; s6	-	Debounced register
+; s7 	-   Slider operator/operand
+; s8	-	debug LEDs
 
-	reset: 	LOAD s3, 00								;reset ALU setpoint to 0
+	reset: 	LOAD s3, 00								;reset running result to 0
+			LOAD s4, 00								
 			OUTPUT s3, 04							;display reset values
-			LOAD s5, 00
+			OUTPUT s4, 05
+			LOAD s5, 00								;zero out stored pushbutton values
 			LOAD s6, 00
 
-			;; wait for btn 3 to be depressed to exit reset state
+			;; wait for btnd to be depressed to exit reset state
 			INPUT s5, 03
 			TEST s5, 08
 			JUMP NZ, reset	;stay in reset until 'depressed'
 		
 	; Main Processing Loop
 	; Runs debouncer on input push btns
-	; Checks current state of push btns to perform operation
+	; Checks current state of push btns to perform operation or reset
 	mainlp:	INPUT s5, 03	; store push buttons
 			CALL del10ms	; delay 10ms
 			INPUT s6, 03	; store push buttons again
@@ -43,41 +47,83 @@ cold_start:
 			
 			; Determine if Btn0 was pressed
 			TEST s5, 01
-			CALL NZ, opadd	; Start Addition
-			
-			; Determine if Btn1 was pressed
-			TEST s5, 02
-			CALL NZ, opsub	; Start Subtraction
+			JUMP NZ, calc	; Start Calculator
 			
 			; Determine if Btn3 was pressed
 			TEST s5, 08
-			JUMP NZ, reset	; Start Subtraction
-			
+			JUMP NZ, reset	; Reset
+
 			; Update Displays
 			OUTPUT s3, 04	; Update Display with ALU REG
 			OUTPUT s4, 05
+			OUTPUT s8, 06	; Update LEDs with last op performed
 
 			JUMP mainlp
 	
+
+
+	; Calculator "operate" loop
+	; s7 holds slider states
+	; Evaluate slider state (7-4) to determine operation
+	; Evaluate slider state (3-0) to determine operand
+	; jump to operator subroutine 
+	calc: INPUT s7, 02 ; grab slider state
+		  ; MSB 4-bits are operator
+
+		  ; add if sw4
+		  TEST s7, 10
+		  JUMP NZ, addop
+
+		  ; sub if sw5
+		  TEST s7, 20
+		  JUMP NZ, subop
+	      
+		  ; shift left if sw6
+		  TEST s7, 40
+		  JUMP NZ, slop
+
+		  ; multiply if sw7
+		  TEST s7, 80
+		  JUMP NZ, multop
+
+	; return here for 1 operation per press	  
+	calcend: RETURN
+
+
 	;	ADD OPERATION
 	;	Handles Carry
-	opadd:	ADD 	s3, 01 ; ADD 1 to register
-	
-	addopend:	INPUT s5, 03
-				TEST s5, 01			;check btn0 and only exit this function if button isn't pressed
-				JUMP NZ, addopend	;stay in this routine until btn is depressed
-				RETURN
+	addop:	ADD s3, 01 ; ADD 1 to register
+			LOAD s8, 01
+			JUMP wait
+
 	
 	;	SUBTRACT OPERATION
 	;	Basic Subtract
-	opsub:	SUB s3, 01		; subtract 1 from S3
-	
-	subend:	INPUT s5, 03
-			TEST s5, 02			;check btn1 and only exit this function if button isn't pressed
-			JUMP NZ, subend	;stay in this routine until btn is depressed
-			RETURN
+	subop:	SUB s3, 01		; subtract 1 from S3
+			LOAD s8, 02
+			JUMP wait
 	
 	
+	; Shift Left operation
+	; Just LEDs to prove we made it
+	slop : LOAD s8, 04
+		   JUMP wait
+
+
+	; Multiply Operation
+	; do nothing for now, just LEDS to prove we made it
+	multop: LOAD s8, 08
+			JUMP wait
+
+	wait:	INPUT s5, 03
+		TEST s5, 01			;check btnr and only exit this function if button isn't pressed
+		JUMP NZ, wait	;stay in this routine until btn is depressed
+		JUMP Z, mainlp
+	
+	
+
+
+
 
 	;;HELPER FUNCTIONS FROM TESTPROG (used for delay in top level, added a 10ms delay)
 	delms:	INPUT s0,07
