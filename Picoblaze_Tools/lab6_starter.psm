@@ -1,7 +1,9 @@
-; Author:	K. Newlander
-; LAB6 Starter Design that contains a global register that defaults to 0 on startup
-;	Adds '1' for each press of BTNR
-;	Subtracts '1' for each press of BTNL
+; Author:	K. Newlander, Josh Eaton
+; LAB6  Design 
+;	Performs Addition, Subtraction, Left Shift, and Multiplication
+;   on a global value, based on states of Nexys dev board slider switches
+;   in accordance with the lab 6 assignment
+;	Operation triggered by BTNR, reset on BTND, value displayed on 7-segment
 
 ; Extra ASM to fix issue with Vivado (see documentation), Skips Address 03
 	JUMP cold_start
@@ -24,6 +26,8 @@ cold_start:
 ; s6	-	Debounced register
 ; s7 	-   Slider operator/operand
 ; s8	-	debug LEDs
+; s9    -   intermediate multiply products
+; sA
 
 	reset: 	LOAD s3,  00								;reset running result to 0
 			LOAD s4,  00	
@@ -109,19 +113,42 @@ cold_start:
 	subop:	AND s7,  0F ; mask operator bits
 			SUB s3, s7	 ; subtract sw value from S3
 			SUBCY s4, 00 ; subtract carry
-			LOAD s8, 02
+			LOAD s8, 02  ; LED to signify subtract
 			JUMP wait
 	
 	
 	; Shift Left operation
-	; Just LEDs to prove we made it
-	slop : LOAD s8, 04
+	slop : AND s7,  0F ; mask operator bits
+
+	sl_loop:  SL0 s3	        ; shift lower bits by 1
+		   	  SLA s4	        ; shift in s3 msb, shift upper bits by 1
+		      SUB s7, 01 		; decrement shift count
+		      COMPARE s7, 00
+		      JUMP NZ, sl_loop    ; loop until shift count is zero
+
+		   LOAD s8, 04		; LED to signify Shift left
 		   JUMP wait
 
 
 	; Multiply Operation
-	; do nothing for now, just LEDS to prove we made it
-	multop: LOAD s8, 08
+	; Shift and add to achieve multiplication
+	; A <= B*Q
+	multop: AND s7,  0F ; mask operator bits
+			LOAD s9, 00
+			LOAD sA, 00
+
+	mult_loop:	TEST s7, 01 ; check first bit of operand
+			    SR0 s7		; shift operand
+			    JUMP Z, skip 
+			    ADD s9, s3
+			    ADDCY sA, s4 
+		skip:	COMPARE s7, 00
+				JUMP NZ,
+				mult_loop ; keep multiplying while there's bits left
+			
+			LOAD s4, sA ; load in result to global
+			LOAD s3, s9
+			LOAD s8, 08 ; LED to signify multiply
 			JUMP wait
 
 	wait:	INPUT s5, 03
